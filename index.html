@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Coletor de Lote - Devoluções</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #121212;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #header {
+      padding: 12px;
+      background: #1f1f1f;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+      border-bottom: 1px solid #333;
+    }
+    .badge {
+      background: #2e7d32;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+    #camera-container {
+      flex: 1;
+      position: relative;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    #controls {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      padding: 20px 10px;
+      background: #1a1a1a;
+      gap: 15px;
+    }
+    .btn {
+      flex: 1;
+      padding: 16px 8px;
+      border-radius: 12px;
+      border: none;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+    }
+    .btn-photo {
+      background: #0288d1;
+      color: white;
+    }
+    .btn-photo:active {
+      background: #0277bd;
+      transform: scale(0.98);
+    }
+    .btn-next {
+      background: #f57c00;
+      color: white;
+    }
+    .btn-next:active {
+      background: #e65100;
+      transform: scale(0.98);
+    }
+    .subtext {
+      font-size: 11px;
+      margin-top: 4px;
+      opacity: 0.85;
+    }
+    /* Flash visual ao bater foto */
+    #flash {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: white;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease-out;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="header">
+    <div>Produto Atual: <span id="prod-label" class="badge">PROD_001</span></div>
+    <div>Fotos deste item: <span id="photo-count">0</span></div>
+  </div>
+
+  <div id="camera-container">
+    <video id="video" autoplay playsinline></video>
+    <div id="flash"></div>
+    <canvas id="canvas" style="display:none;"></canvas>
+  </div>
+
+  <div id="controls">
+    <!-- Botão A: Tirar foto do produto atual -->
+    <button class="btn btn-photo" id="btn-photo">
+      📷 FOTOGRAFAR (A)
+      <span class="subtext">Etiqueta / Lado / Detalhe</span>
+    </button>
+
+    <!-- Botão B: Encerrar item atual e passar para o próximo -->
+    <button class="btn btn-next" id="btn-next">
+      ➡️ PRÓXIMO PRODUTO (B)
+      <span class="subtext">Avançar ID</span>
+    </button>
+  </div>
+
+  <script>
+    let currentProdIndex = 1;
+    let currentPhotoIndex = 1;
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const flash = document.getElementById('flash');
+    const prodLabel = document.getElementById('prod-label');
+    const photoCountLabel = document.getElementById('photo-count');
+
+    // Inicializa a câmera traseira do Samsung A23 com alta resolução
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          },
+          audio: false
+        });
+        video.srcObject = stream;
+      } catch (err) {
+        alert("Erro ao acessar a câmera: " + err.message);
+      }
+    }
+
+    function triggerFlash() {
+      flash.style.opacity = '0.7';
+      setTimeout(() => { flash.style.opacity = '0'; }, 150);
+      if (navigator.vibrate) navigator.vibrate(50);
+    }
+
+    function getFormattedProdId(num) {
+      return 'PROD_' + String(num).padStart(3, '0');
+    }
+
+    // Botão A: Bater Foto
+    document.getElementById('btn-photo').addEventListener('click', () => {
+      triggerFlash();
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const prodId = getFormattedProdId(currentProdIndex);
+      const filename = `${prodId}_FOTO_${currentPhotoIndex}.jpg`;
+
+      // Baixa o arquivo localmente com nome padronizado
+      canvas.toBlob((blob) => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(link.href);
+      }, 'image/jpeg', 0.9);
+
+      currentPhotoIndex++;
+      photoCountLabel.innerText = currentPhotoIndex - 1;
+    });
+
+    // Botão B: Próximo Produto
+    document.getElementById('btn-next').addEventListener('click', () => {
+      if (currentPhotoIndex === 1) {
+        if (!confirm("Você ainda não tirou nenhuma foto deste produto. Deseja pular para o próximo mesmo assim?")) {
+          return;
+        }
+      }
+
+      currentProdIndex++;
+      currentPhotoIndex = 1;
+      
+      prodLabel.innerText = getFormattedProdId(currentProdIndex);
+      photoCountLabel.innerText = "0";
+
+      if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // vibração de confirmação
+    });
+
+    window.addEventListener('load', startCamera);
+  </script>
+</body>
+</html>
