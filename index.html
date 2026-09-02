@@ -6,117 +6,52 @@
   <title>Coletor de Lote</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    
     html, body {
-      width: 100%;
-      height: 100%;
-      background-color: #000;
-      color: #fff;
+      width: 100%; height: 100%;
+      background-color: #000; color: #fff;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       overflow: hidden;
     }
-
     #app {
-      display: flex;
-      flex-direction: column;
-      height: 100dvh; /* Garante tamanho exato descontando barras do Chrome no celular */
-      width: 100%;
-      position: relative;
+      display: flex; flex-direction: column;
+      height: 100dvh; width: 100%; position: relative;
     }
-
     #header {
-      padding: 10px 16px;
-      background: rgba(20, 20, 20, 0.9);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 14px;
-      z-index: 10;
-      border-bottom: 1px solid #333;
+      padding: 10px 16px; background: rgba(20, 20, 20, 0.95);
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 14px; z-index: 10; border-bottom: 1px solid #333;
     }
-
     .badge {
-      background: #2e7d32;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-weight: bold;
+      background: #2e7d32; padding: 4px 8px; border-radius: 4px; font-weight: bold;
     }
-
+    #status-bar {
+      font-size: 11px; color: #aaa; text-align: center; background: #111; padding: 3px 0;
+    }
     #camera-container {
-      flex: 1;
-      position: relative;
-      background: #000;
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      flex: 1; position: relative; background: #000;
+      overflow: hidden; display: flex; align-items: center; justify-content: center;
     }
-
-    video {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
+    video { width: 100%; height: 100%; object-fit: cover; }
     #controls {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 14px 12px calc(14px + env(safe-area-inset-bottom));
-      background: #181818;
-      gap: 12px;
-      z-index: 10;
-      border-top: 1px solid #2a2a2a;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+      background: #181818; gap: 12px; z-index: 10; border-top: 1px solid #2a2a2a;
     }
-
     .btn {
-      flex: 1;
-      min-height: 60px;
-      border-radius: 12px;
-      border: none;
-      font-size: 15px;
-      font-weight: bold;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      flex: 1; min-height: 60px; border-radius: 12px; border: none;
+      font-size: 15px; font-weight: bold; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
       touch-action: manipulation;
     }
-
-    .btn-photo {
-      background: #0288d1;
-      color: white;
-    }
-
-    .btn-photo:active {
-      background: #0277bd;
-    }
-
-    .btn-next {
-      background: #f57c00;
-      color: white;
-    }
-
-    .btn-next:active {
-      background: #e65100;
-    }
-
-    .subtext {
-      font-size: 11px;
-      margin-top: 3px;
-      opacity: 0.85;
-      font-weight: normal;
-    }
-
+    .btn-photo { background: #0288d1; color: white; }
+    .btn-photo:active { background: #0277bd; }
+    .btn-next { background: #f57c00; color: white; }
+    .btn-next:active { background: #e65100; }
+    .subtext { font-size: 11px; margin-top: 3px; opacity: 0.85; font-weight: normal; }
     #flash {
-      position: absolute;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: white;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.1s ease-out;
-      z-index: 5;
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      background: white; opacity: 0; pointer-events: none;
+      transition: opacity 0.1s ease-out; z-index: 5;
     }
   </style>
 </head>
@@ -124,9 +59,10 @@
 
   <div id="app">
     <div id="header">
-      <div>Produto: <span id="prod-label" class="badge">PROD_001</span></div>
+      <div>Item: <span id="prod-label" class="badge">PROD_001</span></div>
       <div>Fotos: <span id="photo-count">0</span></div>
     </div>
+    <div id="status-bar">Pronto para fotografar</div>
 
     <div id="camera-container">
       <video id="video" autoplay playsinline muted></video>
@@ -137,7 +73,7 @@
     <div id="controls">
       <button class="btn btn-photo" id="btn-photo">
         📷 FOTOGRAFAR (A)
-        <span class="subtext">Etiqueta / Peça</span>
+        <span class="subtext">Salva no Drive</span>
       </button>
 
       <button class="btn btn-next" id="btn-next">
@@ -148,6 +84,9 @@
   </div>
 
   <script>
+    // COLE AQUI A URL GERADA NO GOOGLE APPS SCRIPT
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbbYWk8JEN7LFYhiYHop4gaXQpNesfqvWNcrmt_fAqYifAtkAtmTV_8ObzpATgnMcKrg/exec";
+
     let currentProdIndex = 1;
     let currentPhotoIndex = 1;
     const video = document.getElementById('video');
@@ -155,31 +94,47 @@
     const flash = document.getElementById('flash');
     const prodLabel = document.getElementById('prod-label');
     const photoCountLabel = document.getElementById('photo-count');
+    const statusBar = document.getElementById('status-bar');
 
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 }
-          },
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
           audio: false
         });
         video.srcObject = stream;
       } catch (err) {
-        alert("Acesso à câmera não liberado ou erro: " + err.message);
+        alert("Erro na câmera: " + err.message);
       }
     }
 
     function triggerFlash() {
       flash.style.opacity = '0.7';
-      setTimeout(() => { flash.style.opacity = '0'; }, 120);
+      setTimeout(() => { flash.style.opacity = '0'; }, 100);
       if (navigator.vibrate) navigator.vibrate(40);
     }
 
     function getFormattedProdId(num) {
       return 'PROD_' + String(num).padStart(3, '0');
+    }
+
+    async function uploadImage(base64Data, prodId, filename) {
+      statusBar.innerText = `Enviando ${filename} ao Drive...`;
+      try {
+        await fetch(SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prodId: prodId,
+            filename: filename,
+            image: base64Data
+          })
+        });
+        statusBar.innerText = `${filename} gravado com sucesso no Drive!`;
+      } catch (e) {
+        statusBar.innerText = `Erro ao subir ${filename}`;
+      }
     }
 
     document.getElementById('btn-photo').addEventListener('click', () => {
@@ -192,14 +147,10 @@
 
       const prodId = getFormattedProdId(currentProdIndex);
       const filename = `${prodId}_FOTO_${currentPhotoIndex}.jpg`;
+      const base64 = canvas.toDataURL('image/jpeg', 0.85);
 
-      canvas.toBlob((blob) => {
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = filename;
-        link.click();
-        URL.revokeObjectURL(link.href);
-      }, 'image/jpeg', 0.9);
+      // Sobe direto para o Google Drive em background
+      uploadImage(base64, prodId, filename);
 
       currentPhotoIndex++;
       photoCountLabel.innerText = currentPhotoIndex - 1;
@@ -207,9 +158,7 @@
 
     document.getElementById('btn-next').addEventListener('click', () => {
       if (currentPhotoIndex === 1) {
-        if (!confirm("Ainda não tirou fotos deste produto. Avançar mesmo assim?")) {
-          return;
-        }
+        if (!confirm("Nenhuma foto tirada deste item. Deseja avançar mesmo assim?")) return;
       }
 
       currentProdIndex++;
@@ -217,6 +166,7 @@
       
       prodLabel.innerText = getFormattedProdId(currentProdIndex);
       photoCountLabel.innerText = "0";
+      statusBar.innerText = `Iniciando ${prodLabel.innerText}`;
 
       if (navigator.vibrate) navigator.vibrate([80, 50, 80]);
     });
