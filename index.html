@@ -29,13 +29,16 @@
       padding: 3px 6px; border-radius: 4px; font-size: 11px;
     }
     #status-bar {
-      font-size: 11px; color: #ddd; text-align: center; background: #1a1a1a; padding: 4px;
+      font-size: 11px; color: #ffeb3b; text-align: center; background: #1a1a1a; padding: 5px 8px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     #camera-container {
       flex: 1; position: relative; background: #000;
       overflow: hidden; display: flex; align-items: center; justify-content: center;
     }
-    video { width: 100%; height: 100%; object-fit: cover; }
+    video {
+      width: 100%; height: 100%; object-fit: cover;
+    }
     #controls {
       display: flex; justify-content: space-between; align-items: center;
       padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
@@ -65,12 +68,12 @@
     <div id="header">
       <div>Item: <span id="prod-label" class="badge">PROD_001</span></div>
       <div>Fotos: <span id="photo-count">0</span></div>
-      <button class="btn-reset" id="btn-reset">Zerar Lote</button>
+      <button class="btn-reset" id="btn-reset">Zerar</button>
     </div>
-    <div id="status-bar">Pronto</div>
+    <div id="status-bar">Iniciando câmera...</div>
 
     <div id="camera-container">
-      <video id="video" autoplay playsinline muted></video>
+      <video id="video" autoplay playsinline webkit-playsinline muted></video>
       <div id="flash"></div>
       <canvas id="canvas" style="display:none;"></canvas>
     </div>
@@ -89,11 +92,9 @@
   </div>
 
   <script>
-    // COLE AQUI A URL DO SEU APPS SCRIPT
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxYjjsSAyiQQZURU5RiOz0NN17392cq7exjUvg3OLObHehg8yOIRavZwRnpHmmdxvM4_A/exec
-";
+    // COLE SUA URL DO APPS SCRIPT AQUI (mantenha a que você já gerou)
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxYjjsSAyiQQZURU5RiOz0NN17392cq7exjUvg3OLObHehg8yOIRavZwRnpHmmdxvM4_A/exec";
 
-    // Recupera dados salvos da memória local para não perder se o app fechar
     let currentProdIndex = parseInt(localStorage.getItem('savedProdIndex')) || 1;
     let currentPhotoIndex = parseInt(localStorage.getItem('savedPhotoIndex')) || 1;
 
@@ -105,20 +106,54 @@
     const statusBar = document.getElementById('status-bar');
 
     function updateDisplay() {
-      prodLabel.innerText = getFormattedProdId(currentProdIndex);
+      prodLabel.innerText = 'PROD_' + String(currentProdIndex).padStart(3, '0');
       photoCountLabel.innerText = currentPhotoIndex - 1;
     }
 
     async function startCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-          audio: false
-        });
-        video.srcObject = stream;
-      } catch (err) {
-        alert("Erro na câmera: " + err.message);
+      statusBar.innerText = "Solicitando permissão da câmera...";
+      
+      const constraintsList = [
+        // Tentativa 1: Traseira padrão com resolução flexível
+        { video: { facingMode: { ideal: "environment" } }, audio: false },
+        // Tentativa 2: Traseira simples sem restrição
+        { video: { facingMode: "environment" }, audio: false },
+        // Tentativa 3: Qualquer câmera disponível
+        { video: true, audio: false }
+      ];
+
+      let stream = null;
+      for (const constraints of constraintsList) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+          if (stream) break;
+        } catch (e) {
+          console.warn("Tentativa de câmera falhou:", e);
+        }
       }
+
+      if (!stream) {
+        statusBar.style.color = "#f44336";
+        statusBar.innerText = "Erro: câmera bloqueada ou não encontrada. Verifique permissões.";
+        return;
+      }
+
+      video.srcObject = stream;
+      video.setAttribute("playsinline", "true");
+      video.setAttribute("webkit-playsinline", "true");
+      video.muted = true;
+
+      video.onloadedmetadata = async () => {
+        try {
+          await video.play();
+          statusBar.style.color = "#4caf50";
+          statusBar.innerText = "Câmera pronta para fotos";
+        } catch (err) {
+          statusBar.style.color = "#f44336";
+          statusBar.innerText = "Clique na tela para destravar a câmera";
+          document.body.addEventListener('click', () => video.play(), { once: true });
+        }
+      };
     }
 
     function triggerFlash() {
@@ -127,16 +162,17 @@
       if (navigator.vibrate) navigator.vibrate(40);
     }
 
-    function getFormattedProdId(num) {
-      return 'PROD_' + String(num).padStart(3, '0');
-    }
-
     async function uploadImage(base64Data, prodId, filename) {
       statusBar.style.color = "#ffeb3b";
-      statusBar.innerText = `Enviando ${filename}...`;
+      statusBar.innerText = `Subindo ${filename}...`;
+
+      if (!SCRIPT_URL || SCRIPT_URL.includes("SUA_URL_DO_APPS_SCRIPT_AQUI")) {
+        statusBar.style.color = "#ff9800";
+        statusBar.innerText = "Aviso: URL do Apps Script não configurada";
+        return;
+      }
 
       try {
-        // Usa text/plain para evitar bloqueios de CORS prévios com o Google Apps Script
         const response = await fetch(SCRIPT_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -153,23 +189,28 @@
           statusBar.innerText = `Salvo no Drive: ${filename}`;
         } else {
           statusBar.style.color = "#f44336";
-          statusBar.innerText = `Erro script: ${resJson.message}`;
+          statusBar.innerText = `Erro Drive: ${resJson.message}`;
         }
       } catch (e) {
         statusBar.style.color = "#f44336";
-        statusBar.innerText = `Falha de rede ao enviar ${filename}`;
+        statusBar.innerText = `Erro de rede ao subir ${filename}`;
       }
     }
 
     document.getElementById('btn-photo').addEventListener('click', () => {
+      if (!video.videoWidth || !video.videoHeight) {
+        alert("Aguarde a câmera iniciar totalmente.");
+        return;
+      }
+
       triggerFlash();
 
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      const prodId = getFormattedProdId(currentProdIndex);
+      const prodId = 'PROD_' + String(currentProdIndex).padStart(3, '0');
       const filename = `${prodId}_FOTO_${currentPhotoIndex}.jpg`;
       const base64 = canvas.toDataURL('image/jpeg', 0.85);
 
@@ -193,19 +234,19 @@
 
       updateDisplay();
       statusBar.style.color = "#fff";
-      statusBar.innerText = `Iniciando ${prodLabel.innerText}`;
+      statusBar.innerText = `Pronto para PROD_${String(currentProdIndex).padStart(3, '0')}`;
 
       if (navigator.vibrate) navigator.vibrate([80, 50, 80]);
     });
 
     document.getElementById('btn-reset').addEventListener('click', () => {
-      if (confirm("Deseja zerar o contador e voltar para o PROD_001?")) {
+      if (confirm("Zerar e voltar ao PROD_001?")) {
         currentProdIndex = 1;
         currentPhotoIndex = 1;
         localStorage.removeItem('savedProdIndex');
         localStorage.removeItem('savedPhotoIndex');
         updateDisplay();
-        statusBar.innerText = "Lote reiniciado para PROD_001";
+        statusBar.innerText = "Reiniciado para PROD_001";
       }
     });
 
