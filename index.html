@@ -17,15 +17,19 @@
       height: 100dvh; width: 100%; position: relative;
     }
     #header {
-      padding: 10px 16px; background: rgba(20, 20, 20, 0.95);
+      padding: 10px 14px; background: rgba(20, 20, 20, 0.95);
       display: flex; justify-content: space-between; align-items: center;
-      font-size: 14px; z-index: 10; border-bottom: 1px solid #333;
+      font-size: 13px; z-index: 10; border-bottom: 1px solid #333;
     }
     .badge {
       background: #2e7d32; padding: 4px 8px; border-radius: 4px; font-weight: bold;
     }
+    .btn-reset {
+      background: transparent; border: 1px solid #666; color: #aaa;
+      padding: 3px 6px; border-radius: 4px; font-size: 11px;
+    }
     #status-bar {
-      font-size: 11px; color: #aaa; text-align: center; background: #111; padding: 3px 0;
+      font-size: 11px; color: #ddd; text-align: center; background: #1a1a1a; padding: 4px;
     }
     #camera-container {
       flex: 1; position: relative; background: #000;
@@ -61,8 +65,9 @@
     <div id="header">
       <div>Item: <span id="prod-label" class="badge">PROD_001</span></div>
       <div>Fotos: <span id="photo-count">0</span></div>
+      <button class="btn-reset" id="btn-reset">Zerar Lote</button>
     </div>
-    <div id="status-bar">Pronto para fotografar</div>
+    <div id="status-bar">Pronto</div>
 
     <div id="camera-container">
       <video id="video" autoplay playsinline muted></video>
@@ -84,17 +89,25 @@
   </div>
 
   <script>
-    // COLE AQUI A URL GERADA NO GOOGLE APPS SCRIPT
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwbbYWk8JEN7LFYhiYHop4gaXQpNesfqvWNcrmt_fAqYifAtkAtmTV_8ObzpATgnMcKrg/exec";
+    // COLE AQUI A URL DO SEU APPS SCRIPT
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxYjjsSAyiQQZURU5RiOz0NN17392cq7exjUvg3OLObHehg8yOIRavZwRnpHmmdxvM4_A/exec
+";
 
-    let currentProdIndex = 1;
-    let currentPhotoIndex = 1;
+    // Recupera dados salvos da memória local para não perder se o app fechar
+    let currentProdIndex = parseInt(localStorage.getItem('savedProdIndex')) || 1;
+    let currentPhotoIndex = parseInt(localStorage.getItem('savedPhotoIndex')) || 1;
+
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const flash = document.getElementById('flash');
     const prodLabel = document.getElementById('prod-label');
     const photoCountLabel = document.getElementById('photo-count');
     const statusBar = document.getElementById('status-bar');
+
+    function updateDisplay() {
+      prodLabel.innerText = getFormattedProdId(currentProdIndex);
+      photoCountLabel.innerText = currentPhotoIndex - 1;
+    }
 
     async function startCamera() {
       try {
@@ -119,21 +132,32 @@
     }
 
     async function uploadImage(base64Data, prodId, filename) {
-      statusBar.innerText = `Enviando ${filename} ao Drive...`;
+      statusBar.style.color = "#ffeb3b";
+      statusBar.innerText = `Enviando ${filename}...`;
+
       try {
-        await fetch(SCRIPT_URL, {
+        // Usa text/plain para evitar bloqueios de CORS prévios com o Google Apps Script
+        const response = await fetch(SCRIPT_URL, {
           method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
             prodId: prodId,
             filename: filename,
             image: base64Data
           })
         });
-        statusBar.innerText = `${filename} gravado com sucesso no Drive!`;
+
+        const resJson = await response.json();
+        if (resJson.status === "ok") {
+          statusBar.style.color = "#4caf50";
+          statusBar.innerText = `Salvo no Drive: ${filename}`;
+        } else {
+          statusBar.style.color = "#f44336";
+          statusBar.innerText = `Erro script: ${resJson.message}`;
+        }
       } catch (e) {
-        statusBar.innerText = `Erro ao subir ${filename}`;
+        statusBar.style.color = "#f44336";
+        statusBar.innerText = `Falha de rede ao enviar ${filename}`;
       }
     }
 
@@ -149,29 +173,46 @@
       const filename = `${prodId}_FOTO_${currentPhotoIndex}.jpg`;
       const base64 = canvas.toDataURL('image/jpeg', 0.85);
 
-      // Sobe direto para o Google Drive em background
       uploadImage(base64, prodId, filename);
 
       currentPhotoIndex++;
-      photoCountLabel.innerText = currentPhotoIndex - 1;
+      localStorage.setItem('savedPhotoIndex', currentPhotoIndex);
+      updateDisplay();
     });
 
     document.getElementById('btn-next').addEventListener('click', () => {
       if (currentPhotoIndex === 1) {
-        if (!confirm("Nenhuma foto tirada deste item. Deseja avançar mesmo assim?")) return;
+        if (!confirm("Nenhuma foto deste item. Avançar mesmo assim?")) return;
       }
 
       currentProdIndex++;
       currentPhotoIndex = 1;
-      
-      prodLabel.innerText = getFormattedProdId(currentProdIndex);
-      photoCountLabel.innerText = "0";
+
+      localStorage.setItem('savedProdIndex', currentProdIndex);
+      localStorage.setItem('savedPhotoIndex', currentPhotoIndex);
+
+      updateDisplay();
+      statusBar.style.color = "#fff";
       statusBar.innerText = `Iniciando ${prodLabel.innerText}`;
 
       if (navigator.vibrate) navigator.vibrate([80, 50, 80]);
     });
 
-    window.addEventListener('DOMContentLoaded', startCamera);
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      if (confirm("Deseja zerar o contador e voltar para o PROD_001?")) {
+        currentProdIndex = 1;
+        currentPhotoIndex = 1;
+        localStorage.removeItem('savedProdIndex');
+        localStorage.removeItem('savedPhotoIndex');
+        updateDisplay();
+        statusBar.innerText = "Lote reiniciado para PROD_001";
+      }
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      updateDisplay();
+      startCamera();
+    });
   </script>
 </body>
 </html>
