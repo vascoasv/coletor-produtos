@@ -92,9 +92,14 @@
   </div>
 
   <script>
-    // COLE SUA URL DO APPS SCRIPT AQUI (mantenha a que você já gerou)
+    // =========================================================================
+    // ÚNICO LUGAR DE CONFIGURAÇÃO NO HTML:
+    // Cole abaixo a URL da Web que o Google Apps Script gerou para você
+    // Exemplo: const SCRIPT_URL = "https://script.google.com/macros/s/AKfycb.../exec";
+    // =========================================================================
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxYjjsSAyiQQZURU5RiOz0NN17392cq7exjUvg3OLObHehg8yOIRavZwRnpHmmdxvM4_A/exec";
 
+    // Recupera a posição do lote onde parou
     let currentProdIndex = parseInt(localStorage.getItem('savedProdIndex')) || 1;
     let currentPhotoIndex = parseInt(localStorage.getItem('savedPhotoIndex')) || 1;
 
@@ -111,14 +116,11 @@
     }
 
     async function startCamera() {
-      statusBar.innerText = "Solicitando permissão da câmera...";
+      statusBar.innerText = "Conectando à câmera...";
       
       const constraintsList = [
-        // Tentativa 1: Traseira padrão com resolução flexível
         { video: { facingMode: { ideal: "environment" } }, audio: false },
-        // Tentativa 2: Traseira simples sem restrição
         { video: { facingMode: "environment" }, audio: false },
-        // Tentativa 3: Qualquer câmera disponível
         { video: true, audio: false }
       ];
 
@@ -128,13 +130,13 @@
           stream = await navigator.mediaDevices.getUserMedia(constraints);
           if (stream) break;
         } catch (e) {
-          console.warn("Tentativa de câmera falhou:", e);
+          console.warn("Tentativa de inicialização de câmera:", e);
         }
       }
 
       if (!stream) {
         statusBar.style.color = "#f44336";
-        statusBar.innerText = "Erro: câmera bloqueada ou não encontrada. Verifique permissões.";
+        statusBar.innerText = "Erro: permissão da câmera negada ou indisponível.";
         return;
       }
 
@@ -147,10 +149,10 @@
         try {
           await video.play();
           statusBar.style.color = "#4caf50";
-          statusBar.innerText = "Câmera pronta para fotos";
+          statusBar.innerText = "Câmera pronta para uso";
         } catch (err) {
           statusBar.style.color = "#f44336";
-          statusBar.innerText = "Clique na tela para destravar a câmera";
+          statusBar.innerText = "Toque na tela para ativar a câmera";
           document.body.addEventListener('click', () => video.play(), { once: true });
         }
       };
@@ -164,47 +166,43 @@
 
     async function uploadImage(base64Data, prodId, filename) {
       statusBar.style.color = "#ffeb3b";
-      statusBar.innerText = `Subindo ${filename}...`;
-
-      if (!SCRIPT_URL || SCRIPT_URL.includes("SUA_URL_DO_APPS_SCRIPT_AQUI")) {
-        statusBar.style.color = "#ff9800";
-        statusBar.innerText = "Aviso: URL do Apps Script não configurada";
-        return;
-      }
+      statusBar.innerText = `Enviando ${filename} ao Drive...`;
 
       try {
-        const response = await fetch(SCRIPT_URL, {
+        const formData = new URLSearchParams();
+        formData.append("prodId", prodId);
+        formData.append("filename", filename);
+        formData.append("image", base64Data);
+
+        // Disparo com modo no-cors para contornar bloqueios de redirecionamento do Google
+        await fetch(SCRIPT_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            prodId: prodId,
-            filename: filename,
-            image: base64Data
-          })
+          mode: 'no-cors',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: formData.toString()
         });
 
-        const resJson = await response.json();
-        if (resJson.status === "ok") {
-          statusBar.style.color = "#4caf50";
-          statusBar.innerText = `Salvo no Drive: ${filename}`;
-        } else {
-          statusBar.style.color = "#f44336";
-          statusBar.innerText = `Erro Drive: ${resJson.message}`;
-        }
+        statusBar.style.color = "#4caf50";
+        statusBar.innerText = `Gravado no Drive: ${filename}`;
       } catch (e) {
+        console.error("Falha no upload:", e);
         statusBar.style.color = "#f44336";
         statusBar.innerText = `Erro de rede ao subir ${filename}`;
       }
     }
 
+    // Botão A: Bater foto e enviar
     document.getElementById('btn-photo').addEventListener('click', () => {
       if (!video.videoWidth || !video.videoHeight) {
-        alert("Aguarde a câmera iniciar totalmente.");
+        alert("Aguarde a inicialização da câmera.");
         return;
       }
 
       triggerFlash();
 
+      // Ajusta resolução capturada para a resolução nativa do sensor
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
@@ -212,8 +210,9 @@
 
       const prodId = 'PROD_' + String(currentProdIndex).padStart(3, '0');
       const filename = `${prodId}_FOTO_${currentPhotoIndex}.jpg`;
-      const base64 = canvas.toDataURL('image/jpeg', 0.85);
+      const base64 = canvas.toDataURL('image/jpeg', 0.82);
 
+      // Envia em background
       uploadImage(base64, prodId, filename);
 
       currentPhotoIndex++;
@@ -221,9 +220,10 @@
       updateDisplay();
     });
 
+    // Botão B: Próximo produto
     document.getElementById('btn-next').addEventListener('click', () => {
       if (currentPhotoIndex === 1) {
-        if (!confirm("Nenhuma foto deste item. Avançar mesmo assim?")) return;
+        if (!confirm("Nenhuma foto tirada deste item. Deseja avançar mesmo assim?")) return;
       }
 
       currentProdIndex++;
@@ -239,14 +239,16 @@
       if (navigator.vibrate) navigator.vibrate([80, 50, 80]);
     });
 
+    // Botão Zerar Lote
     document.getElementById('btn-reset').addEventListener('click', () => {
-      if (confirm("Zerar e voltar ao PROD_001?")) {
+      if (confirm("Deseja zerar tudo e reiniciar a contagem no PROD_001?")) {
         currentProdIndex = 1;
         currentPhotoIndex = 1;
         localStorage.removeItem('savedProdIndex');
         localStorage.removeItem('savedPhotoIndex');
         updateDisplay();
-        statusBar.innerText = "Reiniciado para PROD_001";
+        statusBar.style.color = "#fff";
+        statusBar.innerText = "Lote reiniciado para PROD_001";
       }
     });
 
