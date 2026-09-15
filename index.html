@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Coletor de Lote - v1.3</title>
+  <title>Coletor de Lote - v1.4</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -71,7 +71,7 @@
       <div>Item: <span id="prod-label" class="badge">PROD_001</span></div>
       <div>Fotos: <span id="photo-count">0</span></div>
       <button class="btn-reset" id="btn-reset">Zerar</button>
-      <span class="version-tag">v1.3 - Drive Sync</span>
+      <span class="version-tag">v1.4 - Direct</span>
     </div>
     <div id="status-bar">Iniciando câmera...</div>
 
@@ -94,6 +94,14 @@
     </div>
   </div>
 
+  <!-- Form e Iframe invisíveis para envio nativo sem bloqueio de rede do navegador -->
+  <iframe name="hidden_upload_frame" id="hidden_upload_frame" style="display:none;"></iframe>
+  <form id="upload-form" method="POST" target="hidden_upload_frame" style="display:none;">
+    <input type="hidden" name="prodId" id="f-prodId">
+    <input type="hidden" name="filename" id="f-filename">
+    <input type="hidden" name="image" id="f-image">
+  </form>
+
   <script>
     // =========================================================================
     // COLE SUA URL DO APPS SCRIPT AQUI ENTRE AS ASPAS:
@@ -109,6 +117,8 @@
     const prodLabel = document.getElementById('prod-label');
     const photoCountLabel = document.getElementById('photo-count');
     const statusBar = document.getElementById('status-bar');
+    const uploadForm = document.getElementById('upload-form');
+    uploadForm.action = SCRIPT_URL;
 
     function updateDisplay() {
       prodLabel.innerText = 'PROD_' + String(currentProdIndex).padStart(3, '0');
@@ -127,14 +137,14 @@
           try {
             await video.play();
             statusBar.style.color = "#4caf50";
-            statusBar.innerText = "Câmera pronta para fotos";
+            statusBar.innerText = "Câmera pronta";
           } catch (e) {
             document.body.addEventListener('click', () => video.play(), { once: true });
           }
         };
       } catch (err) {
         statusBar.style.color = "#f44336";
-        statusBar.innerText = "Erro ao abrir câmera: " + err.message;
+        statusBar.innerText = "Erro câmera: " + err.message;
       }
     }
 
@@ -144,29 +154,22 @@
       if (navigator.vibrate) navigator.vibrate(40);
     }
 
-    async function uploadImage(base64Data, prodId, filename) {
+    function sendNativeForm(base64Data, prodId, filename) {
       statusBar.style.color = "#ffeb3b";
-      statusBar.innerText = `Enviando ${filename}...`;
+      statusBar.innerText = `Gravando ${filename}...`;
 
-      try {
-        await fetch(SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            prodId: prodId,
-            filename: filename,
-            image: base64Data
-          })
-        });
+      document.getElementById('f-prodId').value = prodId;
+      document.getElementById('f-filename').value = filename;
+      document.getElementById('f-image').value = base64Data;
 
+      // O envio via formulário padrão é tratado pelo navegador como navegação,
+      // contornando restrições de CORS e limites restritos do fetch.
+      uploadForm.submit();
+
+      setTimeout(() => {
         statusBar.style.color = "#4caf50";
-        statusBar.innerText = `Foto salva no Drive: ${filename}`;
-      } catch (e) {
-        console.error(e);
-        statusBar.style.color = "#f44336";
-        statusBar.innerText = `Erro de conexão ao enviar ${filename}`;
-      }
+        statusBar.innerText = `Enviado: ${filename}`;
+      }, 1200);
     }
 
     document.getElementById('btn-photo').addEventListener('click', () => {
@@ -177,7 +180,8 @@
 
       triggerFlash();
 
-      const maxWidth = 1280;
+      // Reduz a imagem para ~1024px para envio instantâneo e leve
+      const maxWidth = 1024;
       let width = video.videoWidth;
       let height = video.videoHeight;
 
@@ -193,9 +197,9 @@
 
       const prodId = 'PROD_' + String(currentProdIndex).padStart(3, '0');
       const filename = `${prodId}_FOTO_${currentPhotoIndex}.jpg`;
-      const base64 = canvas.toDataURL('image/jpeg', 0.8);
+      const base64 = canvas.toDataURL('image/jpeg', 0.75);
 
-      uploadImage(base64, prodId, filename);
+      sendNativeForm(base64, prodId, filename);
 
       currentPhotoIndex++;
       localStorage.setItem('savedPhotoIndex', currentPhotoIndex);
@@ -204,7 +208,7 @@
 
     document.getElementById('btn-next').addEventListener('click', () => {
       if (currentPhotoIndex === 1) {
-        if (!confirm("Nenhuma foto tirada deste item. Avançar mesmo assim?")) return;
+        if (!confirm("Nenhuma foto tirada deste item. Deseja avançar mesmo assim?")) return;
       }
 
       currentProdIndex++;
